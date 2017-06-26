@@ -20,7 +20,7 @@ winit = "0.6.3"
 gl_generator = "0.5"
 
 [target.'cfg(target_os = "android")'.dependencies.android_support]
-version = "0.2"
+git = "https://github.com/cosier/android-support-rs"
 
 [target.'cfg(target_os = "ios")'.dependencies]
 objc = "0.2"
