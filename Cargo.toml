@@ -19,7 +19,7 @@ winit = "0.6.3"
 [build-dependencies]
 gl_generator = "0.5"
 
-[target.'cfg(target_os = "android")'.dependencies.android_glue]
+[target.'cfg(target_os = "android")'.dependencies.android_support]
 version = "0.2"
 
 [target.'cfg(target_os = "ios")'.dependencies]

@@ -1,7 +1,6 @@
 #![cfg(target_os = "android")]
 
-extern crate android_glue;
-
+extern crate android_support;
 use libc;
 
 use CreationError::{self, OsError};
@@ -42,7 +41,7 @@ impl Window {
                -> Result<Window, CreationError> {
         let winit_window = winit_builder.build(events_loop).unwrap();
         let opengl = opengl.clone().map_sharing(|w| &w.context);
-        let native_window = unsafe { android_glue::get_native_window() };
+        let native_window = unsafe { android_support::get_native_window() };
         if native_window.is_null() {
             return Err(OsError(format!("Android's native window is null")));
         }
