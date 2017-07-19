@@ -3,7 +3,6 @@
 use ContextError;
 use CreationError;
 use GlAttributes;
-use GlContext;
 use GlRequest;
 use GlProfile;
 use PixelFormat;
@@ -151,11 +150,9 @@ impl Context {
     pub fn get_hglrc(&self) -> winapi::HGLRC {
         self.context.0
     }
-}
 
-impl GlContext for Context {
     #[inline]
-    unsafe fn make_current(&self) -> Result<(), ContextError> {
+    pub unsafe fn make_current(&self) -> Result<(), ContextError> {
         if gl::wgl::MakeCurrent(self.hdc as *const _, self.context.0 as *const _) != 0 {
             Ok(())
         } else {
@@ -164,11 +161,11 @@ impl GlContext for Context {
     }
 
     #[inline]
-    fn is_current(&self) -> bool {
+    pub fn is_current(&self) -> bool {
         unsafe { gl::wgl::GetCurrentContext() == self.context.0 as *const c_void }
     }
 
-    fn get_proc_address(&self, addr: &str) -> *const () {
+    pub fn get_proc_address(&self, addr: &str) -> *const () {
         let addr = CString::new(addr.as_bytes()).unwrap();
         let addr = addr.as_ptr();
 
@@ -180,7 +177,7 @@ impl GlContext for Context {
     }
 
     #[inline]
-    fn swap_buffers(&self) -> Result<(), ContextError> {
+    pub fn swap_buffers(&self) -> Result<(), ContextError> {
         // TODO: decide how to handle the error
         /*if unsafe { gdi32::SwapBuffers(self.hdc) } != 0 {
             Ok(())
@@ -192,13 +189,13 @@ impl GlContext for Context {
     }
 
     #[inline]
-    fn get_api(&self) -> Api {
+    pub fn get_api(&self) -> Api {
         // FIXME: can be opengl es
         Api::OpenGl
     }
 
     #[inline]
-    fn get_pixel_format(&self) -> PixelFormat {
+    pub fn get_pixel_format(&self) -> PixelFormat {
         self.pixel_format.clone()
     }
 }
@@ -220,7 +217,7 @@ unsafe fn create_context(extra: Option<(&gl::wgl_extra::Wgl, &PixelFormatRequire
 {
     let share;
 
-    if let Some((extra_functions, pf_reqs, opengl, extensions)) = extra {
+    if let Some((extra_functions, _pf_reqs, opengl, extensions)) = extra {
         share = opengl.sharing.unwrap_or(ptr::null_mut());
 
         if extensions.split(' ').find(|&i| i == "WGL_ARB_create_context").is_some() {
@@ -609,7 +606,7 @@ unsafe fn choose_arb_pixel_format(extra: &gl::wgl_extra::Wgl, extensions: &str,
     let pf_desc = PixelFormat {
         hardware_accelerated: get_info(gl::wgl_extra::ACCELERATION_ARB) !=
                                                                 gl::wgl_extra::NO_ACCELERATION_ARB,
-        color_bits: get_info(gl::wgl_extra::RED_BITS_ARB) as u8 + 
+        color_bits: get_info(gl::wgl_extra::RED_BITS_ARB) as u8 +
                     get_info(gl::wgl_extra::GREEN_BITS_ARB) as u8 +
                     get_info(gl::wgl_extra::BLUE_BITS_ARB) as u8,
         alpha_bits: get_info(gl::wgl_extra::ALPHA_BITS_ARB) as u8,
@@ -699,6 +696,29 @@ unsafe fn load_extra_functions(window: winapi::HWND) -> Result<gl::wgl_extra::Wg
             return Err(CreationError::OsError(format!("GetClassNameW function failed: {}",
                                               format!("{}", io::Error::last_os_error()))));
         }
+
+        // access to class information of the real window
+        let instance = kernel32::GetModuleHandleW(ptr::null());
+        let mut class: winapi::WNDCLASSEXW = mem::zeroed();
+
+        if user32::GetClassInfoExW(instance, class_name.as_ptr(), &mut class) == 0 {
+            return Err(CreationError::OsError(format!("GetClassInfoExW function failed: {}",
+                                              format!("{}", io::Error::last_os_error()))));
+        }
+
+        // register a new class for the dummy window,
+        // similar to the class of the real window but with a different callback
+        let class_name = OsStr::new("WglDummy Class").encode_wide().chain(Some(0).into_iter())
+                                                   .collect::<Vec<_>>();
+
+        class.cbSize = mem::size_of::<winapi::WNDCLASSEXW>() as winapi::UINT;
+        class.lpszClassName = class_name.as_ptr();
+        class.lpfnWndProc = Some(user32::DefWindowProcW);
+
+        // this shouldn't fail if the registration of the real window class worked.
+        // multiple registrations of the window class trigger an error which we want
+        // to ignore silently (e.g for multi-window setups)
+        user32::RegisterClassExW(&class);
 
         // this dummy window should match the real one enough to get the same OpenGL driver
         let title = OsStr::new("dummy window").encode_wide().chain(Some(0).into_iter())
